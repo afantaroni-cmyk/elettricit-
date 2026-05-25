@@ -1,0 +1,349 @@
+# Simulatore HTML – Circuiti in serie e in parallelo con flusso degli elettroni
+
+Copia tutto questo codice in un file chiamato `index.html` oppure in CodePen.
+
+Il simulatore permette di:
+
+* aumentare/diminuire tensione;
+* aumentare/diminuire resistenza;
+* passare da serie a parallelo;
+* vedere il flusso degli elettroni;
+* vedere la luminosità delle lampadine.
+
+```html
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulatore Circuiti</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background:#f4f4f4;
+    margin:0;
+    padding:20px;
+    text-align:center;
+}
+
+.container {
+    max-width:1000px;
+    margin:auto;
+    background:white;
+    padding:20px;
+    border-radius:18px;
+    box-shadow:0 0 12px rgba(0,0,0,0.15);
+}
+
+.controls {
+    display:grid;
+    grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
+    gap:20px;
+    margin-bottom:20px;
+}
+
+.control-box {
+    background:#fafafa;
+    padding:15px;
+    border-radius:12px;
+    border:1px solid #ddd;
+}
+
+label {
+    font-weight:bold;
+}
+
+.value {
+    font-size:20px;
+    color:#1565c0;
+    margin-top:5px;
+}
+
+svg {
+    width:100%;
+    height:500px;
+    background:#ffffff;
+    border:2px solid #ccc;
+    border-radius:12px;
+}
+
+.wire {
+    stroke:#333;
+    stroke-width:6;
+    fill:none;
+}
+
+.battery {
+    stroke:#000;
+    stroke-width:5;
+}
+
+.electron {
+    fill:#2196f3;
+}
+
+.info {
+    margin-top:20px;
+    font-size:18px;
+    line-height:1.6;
+    text-align:left;
+}
+
+.lamp-glow {
+    transition: all 0.3s;
+}
+
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>Simulatore Circuiti Elettrici</h1>
+
+<div class="controls">
+
+<div class="control-box">
+<label>Tensione (Volt)</label><br>
+<input type="range" min="1" max="12" value="6" id="voltage">
+<div class="value"><span id="vValue">6</span> V</div>
+</div>
+
+<div class="control-box">
+<label>Resistenza lampadine (Ω)</label><br>
+<input type="range" min="1" max="20" value="5" id="resistance">
+<div class="value"><span id="rValue">5</span> Ω</div>
+</div>
+
+<div class="control-box">
+<label>Tipo di circuito</label><br><br>
+<select id="mode">
+<option value="series">Serie</option>
+<option value="parallel">Parallelo</option>
+</select>
+</div>
+
+</div>
+
+<svg id="svg"></svg>
+
+<div class="info" id="info"></div>
+
+</div>
+
+<script>
+
+const svg = document.getElementById('svg');
+const voltageSlider = document.getElementById('voltage');
+const resistanceSlider = document.getElementById('resistance');
+const modeSelect = document.getElementById('mode');
+
+const vValue = document.getElementById('vValue');
+const rValue = document.getElementById('rValue');
+const info = document.getElementById('info');
+
+let electrons = [];
+let animationId = null;
+let currentSpeed = 0;
+
+function createSVG(tag, attrs) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (let k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+}
+
+function drawCircuit() {
+
+    if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+
+    svg.innerHTML = '';
+    electrons = [];
+
+    const V = Number(voltageSlider.value);
+    const R = Number(resistanceSlider.value);
+    const mode = modeSelect.value;
+
+    vValue.textContent = V;
+    rValue.textContent = R;
+
+    let current;
+    let lampPower;
+
+    if(mode === 'series') {
+        current = V / (R * 2);
+        lampPower = current * (V / 2);
+
+        drawSeries(lampPower);
+
+        info.innerHTML = `
+        <b>Circuito in serie</b><br>
+        La tensione si divide tra le lampadine.<br>
+        Aumentando la resistenza totale, la corrente diminuisce.<br><br>
+        Intensità corrente: <b>${current.toFixed(2)} A</b><br>
+        Tensione su ogni lampadina: <b>${(V/2).toFixed(2)} V</b>
+        `;
+
+    } else {
+
+        current = (V / R) * 2;
+        lampPower = (V * V) / R;
+
+        drawParallel(lampPower);
+
+        info.innerHTML = `
+        <b>Circuito in parallelo</b><br>
+        Ogni lampadina riceve tutta la tensione del generatore.<br>
+        La corrente totale si divide nei rami.<br><br>
+        Intensità corrente totale: <b>${current.toFixed(2)} A</b><br>
+        Tensione su ogni lampadina: <b>${V.toFixed(2)} V</b>
+        `;
+    }
+
+    currentSpeed = Math.max(0.001, current * 0.003);
+    animateElectrons();
+}
+
+function lampColor(power) {
+    const intensity = Math.min(220, power * 20);
+    return `rgb(255, ${255-intensity}, 0)`;
+}
+
+function drawSeries(power) {
+
+    svg.appendChild(createSVG('line',{x1:100,y1:250,x2:250,y2:250,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:350,y1:250,x2:500,y2:250,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:600,y1:250,x2:750,y2:250,class:'wire'}));
+
+    svg.appendChild(createSVG('line',{x1:750,y1:250,x2:750,y2:400,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:750,y1:400,x2:100,y2:400,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:100,y1:400,x2:100,y2:250,class:'wire'}));
+
+    drawBattery(100,250);
+
+    drawLamp(300,250,power);
+    drawLamp(550,250,power);
+
+    createElectronPath([
+        [120,250],[740,250],[740,390],[110,390],[110,250]
+    ], 25);
+}
+
+function drawParallel(power) {
+
+    svg.appendChild(createSVG('line',{x1:100,y1:250,x2:250,y2:250,class:'wire'}));
+
+    svg.appendChild(createSVG('line',{x1:250,y1:150,x2:250,y2:350,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:650,y1:150,x2:650,y2:350,class:'wire'}));
+
+    svg.appendChild(createSVG('line',{x1:250,y1:150,x2:650,y2:150,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:250,y1:350,x2:650,y2:350,class:'wire'}));
+
+    drawLamp(450,150,power);
+    drawLamp(450,350,power);
+
+    svg.appendChild(createSVG('line',{x1:650,y1:250,x2:800,y2:250,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:800,y1:250,x2:800,y2:450,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:800,y1:450,x2:100,y2:450,class:'wire'}));
+    svg.appendChild(createSVG('line',{x1:100,y1:450,x2:100,y2:250,class:'wire'}));
+
+    drawBattery(100,250);
+
+    createElectronPath([
+        [120,250],[250,250],[250,150],[650,150],[650,250],[790,250],[790,440],[110,440],[110,250]
+    ], 13);
+
+    createElectronPath([
+        [120,250],[250,250],[250,350],[650,350],[650,250],[790,250],[790,440],[110,440],[110,250]
+    ], 13);
+}
+
+function drawBattery(x,y) {
+    svg.appendChild(createSVG('line',{x1:x,y1:y-30,x2:x,y2:y+30,class:'battery'}));
+    svg.appendChild(createSVG('line',{x1:x+20,y1:y-20,x2:x+20,y2:y+20,class:'battery'}));
+}
+
+function drawLamp(x,y,power) {
+
+    const glow = lampColor(power);
+
+    svg.appendChild(createSVG('circle',{
+        cx:x,
+        cy:y,
+        r:40,
+        fill:glow,
+        stroke:'#444',
+        'stroke-width':4,
+        class:'lamp-glow'
+    }));
+}
+
+function createElectronPath(points, count) {
+
+    for(let i=0;i<count;i++) {
+
+        const e = createSVG('circle',{
+            r:5,
+            class:'electron'
+        });
+
+        svg.appendChild(e);
+
+        electrons.push({
+            el:e,
+            points:points,
+            pos:i/count
+        });
+    }
+}
+
+function animateElectrons() {
+
+    electrons.forEach(e=>{
+
+        e.pos += currentSpeed;
+        if(e.pos>1) e.pos=0;
+
+        const total = e.points.length-1;
+        const scaled = e.pos*total;
+        const index = Math.floor(scaled);
+        const frac = scaled-index;
+
+        const p1 = e.points[index];
+        const p2 = e.points[(index+1)%e.points.length];
+
+        const x = p1[0] + (p2[0]-p1[0])*frac;
+        const y = p1[1] + (p2[1]-p1[1])*frac;
+
+        e.el.setAttribute('cx',x);
+        e.el.setAttribute('cy',y);
+    });
+
+    animationId = requestAnimationFrame(animateElectrons);
+}
+
+voltageSlider.addEventListener('input',drawCircuit);
+resistanceSlider.addEventListener('input',drawCircuit);
+modeSelect.addEventListener('change',drawCircuit);
+
+drawCircuit();
+
+</script>
+
+</body>
+</html>
+```
+
+## Come usarlo in Canva
+
+Metodo più semplice:
+
+1. Vai su CodePen.
+2. Crea un nuovo Pen.
+3. Incolla tutto il codice.
+4. Salva.
+5. Copia il link.
+6. In Canva: App → Incorpora → incolla il link.
+
+In alternativa puoi caricarlo su GitHub Pages o Google Sites.
